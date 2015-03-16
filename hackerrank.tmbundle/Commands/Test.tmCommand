@@ -1,0 +1,305 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>beforeRunningCommand</key>
+	<string>nop</string>
+	<key>command</key>
+	<string>#!/usr/local/bin/python2.7
+
+from selenium import webdriver 
+import json, fileinput, os, requests, time
+from Tkinter import *
+
+class Observable:
+    
+    def __init__(self, initialValue=None):
+        self.data = initialValue
+        self.callbacks = {}
+    
+    def addCallback(self, func):
+        self.callbacks[func] = 1
+    
+    def delCallback(self, func):
+        del self.callback[func]
+    
+    def _docallbacks(self):
+        for func in self.callbacks:
+            func(self.data)    
+    
+    def set(self, data):
+    	self.data = data
+        self._docallbacks()
+        
+
+class CCData:
+    def __init__(self):
+        self.setSource()
+        self.setLanguage()
+        self.response = Observable()
+     
+    def addCallback(self, func):
+        self.callbacks[func] = 1
+    
+    def delCallback(self, func):
+        del self.callback[func]
+    
+    def _docallbacks(self):
+        for func in self.callbacks:
+            func(self.data)    
+    
+    def setSource(self):
+        lines = []
+        for line in fileinput.input():
+            lines.append(line)
+        self.source = ''.join(lines)
+        
+    def setLanguage(self):
+        filename = os.environ['TM_FILENAME']
+        langs = {'.c':'1', '.cpp':'2', '.java':'3', '.cs':'9', '.php':'7', '.rb':'8', '.py':'5', '.pl':'6', '.hs':'12', '.clj':'13', '.scala':'15', '.sh':'14', '.erl':'16', '.lisp':'17', '.lua':'18', '.go':'21'}
+        index = filename.rfind('.')
+        self.lang = langs[filename[index:]]
+        
+    def setInputs(self, inputs):
+        self.inputs = inputs
+        
+    def setOutputs(self, outputs):
+        self.outputs = outputs
+        
+    def setTestCasesFromURL(self, url):
+        driver = webdriver.PhantomJS("/usr/local/bin/phantomjs", service_log_path='/var/log/phantomjs/ghostdriver.log')
+        driver.implicitly_wait(10) # seconds
+        driver.get(url)
+        runButton = driver.find_element_by_xpath("//button[@data-analytics='Compile and Test']")
+        # occasionally C stub has no time to load causing compile error, so wait a bit
+        time.sleep(.5)
+        runButton.click()
+        xmp = driver.find_elements_by_tag_name('xmp')
+        self.inputs = []
+        for ele in xmp[::3]:
+            self.inputs.append(ele.text)
+        self.outputs = []
+        for ele in xmp[1::3]:
+            self.outputs.append(ele.text)
+        
+    def getJSON(self):
+        data = {"source": self.source, "lang": self.lang, "testcases": json.dumps(self.inputs), "callback_url": "", "wait":'true', 'api_key':'hackerrank|429225-184|9c39d83b08d320cce8ec23832d328aa73af0e672'}
+        self.response.set(requests.post('http://api.hackerrank.com/checker/submission.json', data=data).json())
+                         
+
+class CCView:
+
+    def __init__(self, master):
+        self.master = master
+        self.master.title("HackerRank Code Checker")
+        self.master.minsize(width=600, height=100)
+        self.master.maxsize(width=600, height=100)
+        self.center(self.master)
+        self.topFrame = Frame(self.master)
+        self.topFrame.pack(side="top", fill="both", expand=True)
+        for r in range(8):
+            self.topFrame.rowconfigure(r, weight=1)    
+        for c in range(4):
+            self.topFrame.columnconfigure(c, weight=1)
+        self.frame = Frame(self.topFrame)
+        self.frame.grid(row=0, column=0, rowspan=4, columnspan=3)
+        
+        self.urlButton = Button(self.frame, text="Enter HR Problem URL", fg="red")
+        self.urlButton.grid(row=4,column=0)
+        self.customButton = Button(self.frame, text="Enter Custom Input &amp; Output")
+        self.customButton.grid(row=4,column=1)      
+        self.cancelButton = Button(self.frame, text="Cancel")
+        self.cancelButton.grid(row=4,column=2)
+        
+    def URLView(self):
+        self.frame.destroy()
+        self.frame = Frame(self.topFrame)
+        self.frame.grid(row=0, column=0, rowspan=4, columnspan=4)
+        
+        urlLabel = Label(self.frame, text = "ENTER YOUR URL:")
+        urlLabel.grid(row=0, column=0, columnspan=4)
+        self.urlField = Entry(self.frame, width=70)
+        self.urlField.grid(row=1,column=0, columnspan=4)
+        
+        self.cancelButton = Button(self.frame, text="Cancel")
+        self.cancelButton.grid(row=2,column=1, sticky=W)
+        self.doneButton = Button(self.frame, text="Done")
+        self.doneButton.grid(row=2,column=2, sticky=E)  
+        
+        msgLabel = Label(self.frame, text = "PLEASE NOTE REQUEST MIGHT TAKE A MINUTE TO RUN")
+        msgLabel.grid(row=3,column=0, columnspan=4)
+          
+        
+    def customView(self):
+        self.master.minsize(width=600, height=500)
+        self.master.maxsize(width=600, height=500)
+        self.frame.destroy()
+        self.center(self.master)
+        self.frame = Frame(self.topFrame)
+        self.frame.grid(row=0, column=0, rowspan=8, columnspan=6)
+        
+        inputLabel = Label(self.frame, text = "ENTER INPUT:")
+        inputLabel.grid(row=0, column=0, columnspan=3)
+        self.inputField = Text(self.frame, width=40, borderwidth=1, relief=SUNKEN)
+        self.inputField.grid(row=1,column=0, rowspan=6, columnspan=3)
+        outputLabel = Label(self.frame, text = "ENTER EXPECTED OUTPUT:")
+        outputLabel.grid(row=0, column=3, columnspan=3)
+        self.outputField = Text(self.frame, width=40, borderwidth=1,relief=SUNKEN)
+        self.outputField.grid(row=1,column=3,rowspan=6,columnspan=3)
+        
+        self.cancelButton = Button(self.frame, text="Cancel")
+        self.cancelButton.grid(row=7,column=0, columnspan=2, sticky=E)
+        self.addButton = Button(self.frame, text="Add Another Test Case")
+        self.addButton.grid(row=7,column=2, columnspan=2)
+        self.doneButton = Button(self.frame, text="Done")
+        self.doneButton.grid(row=7,column=4, columnspan=2,sticky=W)
+
+    def resultsView(self):
+        self.master.minsize(width=450, height=450)
+        self.master.maxsize(width=450, height=450)
+        self.topFrame.destroy()
+        self.center(self.master)
+        self.canvas=Canvas(self.master)
+        self.canvas.pack(side=TOP, expand=TRUE)
+        scrollbar = Scrollbar(self.canvas)
+        scrollbar.pack(side=RIGHT, fill=Y)
+
+        self.results = Text(self.canvas, yscrollcommand=scrollbar.set, borderwidth=0)
+        self.results.pack(side=LEFT, fill=BOTH)
+        self.doneButton = Button(self.master, text="Done")
+        self.doneButton.pack(side=BOTTOM)
+        scrollbar.config(command=self.results.yview)
+                                  
+            
+    def center(self, win):
+        win.update_idletasks()
+        width = win.winfo_width()
+        height = win.winfo_height()
+        x = (win.winfo_screenwidth() / 2) - (width / 2)
+        y = (win.winfo_screenheight() / 3) - (height / 3)
+        win.geometry('{}x{}+{}+{}'.format(width, height, x, y))
+
+
+class CCController:
+        
+    def __init__(self, master):
+        self.view = CCView(master)
+        self.model = CCData()
+        self.model.response.addCallback(self.responseReceived)
+        self.inputs = []
+        self.outputs = []
+        
+        self.view.urlButton.config(command=self.getURL)
+        self.view.customButton.config(command=self.getCustom)
+        self.view.cancelButton.config(command=self.view.frame.quit)
+        
+    
+    def getCustom(self):
+        self.view.customView()
+        self.view.cancelButton.config(command=self.view.frame.quit)
+        self.view.addButton.config(command=self.readInputsAndOutputs)
+        self.view.doneButton.config(command=self.sendIOToModel)
+        
+    def readInputsAndOutputs(self):
+        self.inputs.append(self.view.inputField.get(1.0, END))
+        self.outputs.append(self.view.outputField.get(1.0, END))
+        self.view.inputField.delete(1.0, END)
+        self.view.outputField.delete(1.0, END)
+        
+    def sendIOToModel(self):
+        self.readInputsAndOutputs()
+        self.model.setInputs(self.inputs)
+        self.model.setOutputs(self.outputs)
+        self.model.getJSON()
+        
+    def getURL(self):
+        self.view.URLView()
+        self.view.cancelButton.config(command=self.view.frame.quit)
+        self.view.doneButton.config(command=self.sendURLToModel)
+        
+    def sendURLToModel(self):  
+        url = self.view.urlField.get()
+        self.model.setTestCasesFromURL(url)
+        self.model.getJSON()
+        
+    def responseReceived(self, response):
+        self.view.resultsView()
+        self.parseResponse(response)
+        for str in self.results:
+            self.view.results.insert(END, str)
+            self.view.results.insert(END, '\n')
+        self.view.doneButton.config(command=self.view.master.destroy)
+    
+    def parseResponse(self, response):
+        results = []
+        results.append('RESULTS FROM CODE CHECKER\n')
+        if response['result']['stderr'][0] == False:
+            testCases = len(response['result']['message'])
+            for i in xrange(testCases):
+                output = response['result']['stdout'][i].split('\n')
+                output = filter(bool, output)  # filter here is to remove empty elements
+                expectedOutput = self.model.outputs[i].split('\n')
+                expectedOutput = filter(bool, expectedOutput)
+                expectedOutput = filter(bool, expectedOutput)
+                if len(output) != len(expectedOutput):
+                    successStr = "FAILURE\n"
+                else:
+                    successStr = "SUCCESS\n"
+                    for j in xrange(len(output)):
+                        if output[j] != expectedOutput[j]:
+                            successStr = "FAILURE"
+                            break
+                results.append('Testcase ' + str(i))
+                results.append('Result: ' + successStr)
+                results.append('INPUT')
+                input = filter(bool, self.model.inputs[i].split('\n'))
+                results.extend(input)
+                results.append('') 
+                results.append('YOUR OUTPUT')
+                results.extend(output)
+                results.append('') 
+                results.append('EXPECTED OUTPUT')
+                results.extend(expectedOutput)
+                results.append('') 
+                results.append('') 
+        else:
+            results.append('ERROR!')
+            results.append(response['result']['stderr'][0])
+        self.results = results
+
+    
+def main():
+    root = Tk()
+    app = CCController(root)
+    os.system('''/usr/bin/osascript -e 'tell app "Finder" to set frontmost of process "Python" to true' ''')
+    root.mainloop()
+    return
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except KeyError as ke:
+        print "File must end with known programming language extension!"
+
+</string>
+	<key>input</key>
+	<string>document</string>
+	<key>inputFormat</key>
+	<string>text</string>
+	<key>keyEquivalent</key>
+	<string>@h</string>
+	<key>name</key>
+	<string>Run CodeChecker</string>
+	<key>outputCaret</key>
+	<string>afterOutput</string>
+	<key>outputFormat</key>
+	<string>text</string>
+	<key>outputLocation</key>
+	<string>toolTip</string>
+	<key>uuid</key>
+	<string>DCF0A29A-DD5D-4703-850F-4BCE65683691</string>
+	<key>version</key>
+	<integer>2</integer>
+</dict>
+</plist>
